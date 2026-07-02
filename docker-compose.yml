@@ -1,7 +1,7 @@
 services:
   discord-bot:
     # Replace <your-github-username> with your actual GitHub username
-    image: ghcr.io/lammy93/discord-bot:latest
+    image: ghcr.io/lammy93/discord-immitator:latest
     container_name: discord_imitator_bot
     restart: unless-stopped
     ports:
