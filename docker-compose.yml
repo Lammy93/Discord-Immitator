@@ -1,9 +1,7 @@
 services:
   discord-bot:
-    image: discord-imitator:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # Replace <your-github-username> with your actual GitHub username
+    image: ghcr.io/lammy93/discord-bot:latest
     container_name: discord_imitator_bot
     restart: unless-stopped
     ports:
