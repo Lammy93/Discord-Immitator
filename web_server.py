@@ -94,7 +94,7 @@ async def imitate_member(req: ImitateRequest):
         
         # Attempt to change bot's nickname in this server to match the target
         try:
-            await guild.edit(nick=member.display_name)
+            await guild.me.edit(nick=member.display_name)
         except discord.Forbidden:
             logger.warning(f"Could not change nickname in guild {guild.id} (Missing Manage Nicknames)")
 
