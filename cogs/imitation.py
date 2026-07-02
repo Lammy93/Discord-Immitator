@@ -13,14 +13,11 @@ class Imitation(commands.Cog):
     async def get_or_create_webhook(self, channel: discord.TextChannel) -> discord.Webhook:
         """Finds an existing webhook created by the bot or creates a new one."""
         try:
-            # Check for existing webhooks in this channel
             webhooks = await channel.webhooks()
             for webhook in webhooks:
-                # If the bot is the creator of the webhook or it's named 'Imitator'
                 if webhook.user == self.bot.user or webhook.name == "BotImitator":
                     return webhook
             
-            # Create a new webhook if none exist
             logger.info(f"Creating new webhook 'BotImitator' in channel: {channel.name} ({channel.id})")
             return await channel.create_webhook(name="BotImitator", reason="Used for member imitation features.")
         except Exception as e:
@@ -30,49 +27,38 @@ class Imitation(commands.Cog):
     # --- Listener for active sessions ---
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Ignore bot messages and system messages
         if message.author.bot or not message.guild or not isinstance(message.channel, discord.TextChannel):
             return
 
-        # Check if this user has an active imitation session in this guild
         target_id = database.get_imitation_session(message.author.id, message.guild.id)
         if not target_id:
             return
 
-        # We have an active session! Let's forward this message as the target
         try:
-            # Try to fetch target member
             target_member = message.guild.get_member(int(target_id))
             if not target_member:
                 target_member = await message.guild.fetch_member(int(target_id))
 
             if not target_member:
-                # If member left or can't be found, end the session
                 database.stop_imitation_session(message.author.id, message.guild.id)
-                logger.warning(f"Target member {target_id} not found in guild {message.guild.id}. Ended session for {message.author.id}.")
+                logger.warning(f"Target member {target_id} not found. Ended session for {message.author.id}.")
                 return
 
-            # Get or create webhook for this channel
             webhook = await self.get_or_create_webhook(message.channel)
 
-            # Delete original message
             try:
                 await message.delete()
             except discord.Forbidden:
-                logger.warning(f"Missing Manage Messages permission in guild {message.guild.id} channel {message.channel.id}")
+                logger.warning(f"Missing Manage Messages permission in guild {message.guild.id}")
 
-            # Prepare files if there are attachments
             files = []
             if message.attachments:
                 for attachment in message.attachments:
                     try:
-                        file_obj = await attachment.to_file()
-                        files.append(file_obj)
+                        files.append(await attachment.to_file())
                     except Exception as e:
                         logger.error(f"Failed to download attachment {attachment.url}: {e}")
 
-            # Send message via webhook mimicking the target
-            # If the user typed nothing but sent files, content might be empty/None
             content = message.content if message.content else None
             
             await webhook.send(
@@ -83,34 +69,26 @@ class Imitation(commands.Cog):
                 embeds=message.embeds,
                 allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True)
             )
-            logger.info(f"Forwarded message from {message.author} (imitating {target_member}) in channel {message.channel.id}")
-
         except Exception as e:
             logger.error(f"Error in on_message imitation forwarding: {e}", exc_info=True)
 
 
-    # --- Slash Commands ---
+    # --- Direct Imitation Commands ---
     @app_commands.command(
         name="imitate",
         description="Send a single message imitating another member."
     )
-    @app_commands.describe(
-        member="The guild member you want to imitate",
-        message="The message content to send"
-    )
+    @app_commands.describe(member="The guild member to imitate", message="Message to send")
     async def imitate(self, interaction: discord.Interaction, member: discord.Member, message: str):
-        # Must be in a text channel
         if not isinstance(interaction.channel, discord.TextChannel):
             await interaction.response.send_message("❌ This command can only be used in server text channels.", ephemeral=True)
             return
 
-        # Check bot permissions in this channel
         permissions = interaction.channel.permissions_for(interaction.guild.me)
         if not permissions.manage_webhooks:
-            await interaction.response.send_message("❌ I need the **Manage Webhooks** permission in this channel to imitate members.", ephemeral=True)
+            await interaction.response.send_message("❌ I need **Manage Webhooks** permission in this channel.", ephemeral=True)
             return
 
-        # Acknowledge immediately (since webhook creation/sending might take > 3 seconds)
         await interaction.response.defer(ephemeral=True)
 
         try:
@@ -121,92 +99,182 @@ class Imitation(commands.Cog):
                 avatar_url=member.display_avatar.url,
                 allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True)
             )
-            await interaction.followup.send(f"✅ Successfully sent message imitating **{member.display_name}**.", ephemeral=True)
+            await interaction.followup.send(f"✅ Sent message imitating **{member.display_name}**.", ephemeral=True)
         except Exception as e:
-            logger.error(f"Failed to run /imitate command: {e}", exc_info=True)
-            await interaction.followup.send("❌ Failed to send the imitated message. Make sure I have webhook permissions.", ephemeral=True)
+            logger.error(f"Failed to run /imitate: {e}", exc_info=True)
+            await interaction.followup.send("❌ Failed to send the imitated message.", ephemeral=True)
 
+    @app_commands.command(
+        name="imitate-preset",
+        description="Send a single message imitating a saved member preset."
+    )
+    @app_commands.describe(preset_name="The name of the saved preset", message="Message to send")
+    async def imitate_preset(self, interaction: discord.Interaction, preset_name: str, message: str):
+        if not isinstance(interaction.channel, discord.TextChannel):
+            await interaction.response.send_message("❌ This command can only be used in server text channels.", ephemeral=True)
+            return
+
+        # Retrieve preset
+        member_id = database.get_member_preset(preset_name, interaction.user.id, interaction.guild.id)
+        if not member_id:
+            await interaction.response.send_message(f"❌ Preset `{preset_name}` not found. Create one with `/copy-preset add`.", ephemeral=True)
+            return
+
+        permissions = interaction.channel.permissions_for(interaction.guild.me)
+        if not permissions.manage_webhooks:
+            await interaction.response.send_message("❌ I need **Manage Webhooks** permission in this channel.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            target_member = interaction.guild.get_member(int(member_id))
+            if not target_member:
+                target_member = await interaction.guild.fetch_member(int(member_id))
+
+            webhook = await self.get_or_create_webhook(interaction.channel)
+            await webhook.send(
+                content=message,
+                username=target_member.display_name if target_member else f"Preset: {preset_name}",
+                avatar_url=target_member.display_avatar.url if target_member else None,
+                allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True)
+            )
+            await interaction.followup.send(f"✅ Sent message imitating preset **{preset_name}**.", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Failed to run /imitate-preset: {e}", exc_info=True)
+            await interaction.followup.send("❌ Failed to send the imitated message.", ephemeral=True)
 
     # --- Imitation Sessions Commands ---
-    @app_commands.default_permissions(manage_messages=True)  # Restrict to moderators/admins by default
+    @app_commands.default_permissions(manage_messages=True)
     @app_commands.command(
         name="imitate-session",
         description="Manage your real-time member imitation session."
     )
     @app_commands.choices(
         action=[
-            app_commands.Choice(name="Start - Speak as a target member in real-time", value="start"),
-            app_commands.Choice(name="Stop - End your current active imitation session", value="stop"),
-            app_commands.Choice(name="Status - Check current session status", value="status")
+            app_commands.Choice(name="Start (Direct Member)", value="start"),
+            app_commands.Choice(name="Start (Saved Preset)", value="start_preset"),
+            app_commands.Choice(name="Stop", value="stop"),
+            app_commands.Choice(name="Status", value="status")
         ]
     )
     @app_commands.describe(
         action="The session action to perform",
-        member="The guild member to imitate (Only required for 'Start')"
+        member="The member to imitate (for 'Start Direct')",
+        preset_name="The preset to use (for 'Start Preset')"
     )
     async def imitate_session(
         self, 
         interaction: discord.Interaction, 
         action: str, 
-        member: discord.Member = None
+        member: discord.Member = None,
+        preset_name: str = None
     ):
         guild_id = interaction.guild.id
         user_id = interaction.user.id
 
         if action == "start":
             if not member:
-                await interaction.response.send_message("❌ You must specify a member to start imitating.", ephemeral=True)
+                await interaction.response.send_message("❌ You must specify a member for direct start.", ephemeral=True)
                 return
-            
-            # Check bot permissions
-            if not isinstance(interaction.channel, discord.TextChannel):
-                await interaction.response.send_message("❌ Sessions can only be managed in server text channels.", ephemeral=True)
+            target_id = member.id
+        
+        elif action == "start_preset":
+            if not preset_name:
+                await interaction.response.send_message("❌ You must specify a preset name.", ephemeral=True)
                 return
-
-            permissions = interaction.channel.permissions_for(interaction.guild.me)
-            if not permissions.manage_webhooks or not permissions.manage_messages:
-                await interaction.response.send_message(
-                    "❌ I need **Manage Webhooks** and **Manage Messages** permissions in this channel to run an imitation session.", 
-                    ephemeral=True
-                )
+            target_id = database.get_member_preset(preset_name, user_id, guild_id)
+            if not target_id:
+                await interaction.response.send_message(f"❌ Preset `{preset_name}` not found.", ephemeral=True)
                 return
-
-            # Start session in database
-            database.start_imitation_session(user_id, member.id, guild_id)
-            await interaction.response.send_message(
-                f"🎭 **Imitation Session Started!**\n"
-                f"Every message you send in this server will now be deleted and sent as **{member.display_name}**.\n"
-                f"To end this session, run `/imitate-session action:Stop`.", 
-                ephemeral=True
-            )
-            logger.info(f"User {interaction.user} (ID: {user_id}) started imitating {member} (ID: {member.id}) in guild {guild_id}")
 
         elif action == "stop":
             was_stopped = database.stop_imitation_session(user_id, guild_id)
             if was_stopped:
-                await interaction.response.send_message("🎭 **Imitation Session Stopped.** You are now speaking as yourself.", ephemeral=True)
-                logger.info(f"User {interaction.user} stopped their imitation session in guild {guild_id}")
+                await interaction.response.send_message("🎭 **Session Stopped.** You are now yourself.", ephemeral=True)
             else:
-                await interaction.response.send_message("❌ You do not have an active imitation session in this server.", ephemeral=True)
+                await interaction.response.send_message("❌ No active session found.", ephemeral=True)
+            return
 
         elif action == "status":
             target_id = database.get_imitation_session(user_id, guild_id)
             if target_id:
                 try:
-                    target_member = interaction.guild.get_member(int(target_id))
-                    if not target_member:
-                        target_member = await interaction.guild.fetch_member(int(target_id))
-                    name = target_member.display_name if target_member else f"User ID: {target_id}"
+                    target_member = interaction.guild.get_member(int(target_id)) or await interaction.guild.fetch_member(int(target_id))
+                    name = target_member.display_name if target_member else f"ID: {target_id}"
                 except Exception:
-                    name = f"User ID: {target_id}"
-                
-                await interaction.response.send_message(
-                    f"🎭 You are currently imitating: **{name}**.\n"
-                    f"All your messages in this server are forwarded as them. Run `/imitate-session action:Stop` to end.", 
-                    ephemeral=True
-                )
+                    name = f"ID: {target_id}"
+                await interaction.response.send_message(f"🎭 Imitating: **{name}**.", ephemeral=True)
             else:
-                await interaction.response.send_message("🎭 You do not have any active imitation session. You are speaking as yourself.", ephemeral=True)
+                await interaction.response.send_message("🎭 No active session.", ephemeral=True)
+            return
+
+        # Logic for starting session (shared by both direct and preset)
+        if not isinstance(interaction.channel, discord.TextChannel):
+            await interaction.response.send_message("❌ Text channels only.", ephemeral=True)
+            return
+
+        permissions = interaction.channel.permissions_for(interaction.guild.me)
+        if not permissions.manage_webhooks or not permissions.manage_messages:
+            await interaction.response.send_message("❌ I need **Manage Webhooks** and **Manage Messages** permissions.", ephemeral=True)
+            return
+
+        database.start_imitation_session(user_id, target_id, guild_id)
+        
+        # Find display name for the response
+        display_name = "Unknown"
+        try:
+            tm = interaction.guild.get_member(int(target_id)) or await interaction.guild.fetch_member(int(target_id))
+            display_name = tm.display_name if tm else "Unknown"
+        except Exception: pass
+
+        await interaction.response.send_message(
+            f"🎭 **Imitation Session Started!**\n"
+            f"You are now speaking as **{display_name}**. Run `/imitate-session action:Stop` to end.", 
+            ephemeral=True
+        )
+
+    # --- Member Preset Management ---
+    @app_commands.group(name="copy-preset", description="Manage your saved member 'copies' (presets)")
+    async def copy_preset_group(self, interaction: discord.Interaction):
+        pass
+
+    @copy_preset_group.command(
+        name="add",
+        description="Save a member as a named preset."
+    )
+    @app_commands.describe(name="Name for the preset (e.g. 'TheBoss')", member="Member to save")
+    async def preset_add(self, interaction: discord.Interaction, name: str, member: discord.Member):
+        success = database.add_member_preset(name, member.id, interaction.guild.id, interaction.user.id)
+        if success:
+            await interaction.response.send_message(f"✅ Saved **{member.display_name}** as preset `{name}`!", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ Preset name `{name}` is already taken by you in this server.", ephemeral=True)
+
+    @copy_preset_group.command(
+        name="list",
+        description="List all your saved member presets."
+    )
+    async def preset_list(self, interaction: discord.Interaction):
+        presets = database.get_user_presets(interaction.user.id, interaction.guild.id)
+        if not presets:
+            await interaction.response.send_message("📂 You haven't saved any member presets yet. Use `/copy-preset add`.", ephemeral=True)
+            return
+
+        list_text = "\n".join([f"• `{p['preset_name']}` (ID: {p['member_id']})" for p in presets])
+        await interaction.response.send_message(f"📂 **Your Saved Member Copies:**\n{list_text}", ephemeral=True)
+
+    @copy_preset_group.command(
+        name="remove",
+        description="Remove a saved member preset."
+    )
+    @app_commands.describe(name="The name of the preset to delete")
+    async def preset_remove(self, interaction: discord.Interaction, name: str):
+        success = database.delete_member_preset(name, interaction.user.id, interaction.guild.id)
+        if success:
+            await interaction.response.send_message(f"🗑️ Removed preset `{name}`.", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ Preset `{name}` not found.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Imitation(bot))

@@ -7,8 +7,11 @@ services:
       dockerfile: Dockerfile
     container_name: discord_imitator_bot
     restart: unless-stopped
+    ports:
+      - "8000:8000"
     volumes:
       # Persist downloaded sound bites
+
       - ./sounds:/app/sounds
       # Persist SQLite database
       - ./data:/app/data

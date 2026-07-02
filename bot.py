@@ -2,9 +2,11 @@ import os
 import asyncio
 import logging
 import discord
+import uvicorn
 from discord.ext import commands
 from dotenv import load_dotenv
 import database
+import web_server
 
 # Set up logging
 logging.basicConfig(
@@ -49,6 +51,13 @@ class ImitatorBot(commands.Bot):
                     logger.info(f"Loaded extension: {cog_name}")
                 except Exception as e:
                     logger.error(f"Failed to load extension {cog_name}: {e}", exc_info=True)
+
+        # Start Web Server
+        web_server.set_bot(self)
+        config = uvicorn.Config(web_server.app, host="0.0.0.0", port=8000, log_level="info")
+        server = uvicorn.Server(config)
+        self.loop.create_task(server.serve())
+        logger.info("Web UI server started on http://0.0.0.0:8000")
 
     async def on_ready(self):
         logger.info(f"Logged in as {self.user} (ID: {self.user.id})")

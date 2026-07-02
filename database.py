@@ -43,6 +43,19 @@ def init_db():
                 UNIQUE(user_id, guild_id)
             )
         """)
+        
+        # Create table for member presets (saved copies)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS member_presets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                preset_name TEXT NOT NULL,
+                member_id TEXT NOT NULL,
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(preset_name, user_id, guild_id)
+            )
+        """)
         conn.commit()
 
 # --- Soundbites Methods ---
@@ -132,3 +145,52 @@ def clear_all_sessions_for_guild(guild_id: str):
         cursor = conn.cursor()
         cursor.execute("DELETE FROM imitation_sessions WHERE guild_id = ?", (str(guild_id),))
         conn.commit()
+
+# --- Member Presets Methods ---
+
+def add_member_preset(preset_name: str, member_id: str, guild_id: str, user_id: str) -> bool:
+    """Saves a member as a named preset for a specific user. Returns True if successful."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO member_presets (preset_name, member_id, guild_id, user_id) VALUES (?, ?, ?, ?)",
+                (preset_name.lower(), str(member_id), str(guild_id), str(user_id))
+            )
+            conn.commit()
+            return True
+    except sqlite3.IntegrityError:
+        return False
+
+def get_member_preset(preset_name: str, user_id: str, guild_id: str):
+    """Retrieves a member ID for a specific preset name."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT member_id FROM member_presets WHERE preset_name = ? AND user_id = ? AND guild_id = ?",
+            (preset_name.lower(), str(user_id), str(guild_id))
+        )
+        row = cursor.fetchone()
+        return row["member_id"] if row else None
+
+def get_user_presets(user_id: str, guild_id: str):
+    """Retrieves all presets saved by a user in a guild."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT preset_name, member_id FROM member_presets WHERE user_id = ? AND guild_id = ? ORDER BY preset_name ASC",
+            (str(user_id), str(guild_id))
+        )
+        return cursor.fetchall()
+
+def delete_member_preset(preset_name: str, user_id: str, guild_id: str) -> bool:
+    """Deletes a specific preset. Returns True if deleted."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM member_presets WHERE preset_name = ? AND user_id = ? AND guild_id = ?",
+            (preset_name.lower(), str(user_id), str(guild_id))
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+

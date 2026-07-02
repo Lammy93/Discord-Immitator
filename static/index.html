@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Imitator Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        body { background: #0f172a; color: #f8fafc; }
+        .tab-active { border-bottom: 3px solid #8b5cf6; color: #8b5cf6; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-4xl font-bold text-white flex items-center gap-3">
+                    <i class="fa-solid fa-mask text-violet-500"></i> Imitator Dashboard
+                </h1>
+                <p id="guild-status" class="text-slate-400 mt-1">Connecting to bot...</p>
+            </div>
+            <div id="voice-status" class="glass px-4 py-2 rounded-full text-sm flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-slate-500" id="status-indicator"></span>
+                <span id="status-text">Disconnected</span>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <nav class="flex gap-8 mb-8 border-b border-slate-700">
+            <button onclick="showTab('members')" id="tab-members" class="pb-2 px-1 font-medium tab-active transition-colors">Members</button>
+            <button onclick="showTab('sounds')" id="tab-sounds" class="pb-2 px-1 font-medium text-slate-400 hover:text-white transition-colors">Soundboard</button>
+            <button onclick="showTab('voice')" id="tab-voice" class="pb-2 px-1 font-medium text-slate-400 hover:text-white transition-colors">Voice Channels</button>
+        </nav>
+
+        <!-- Member Tab -->
+        <div id="view-members" class="tab-view grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Members loaded here -->
+        </div>
+
+        <!-- Sounds Tab -->
+        <div id="view-sounds" class="tab-view hidden">
+            <div class="glass p-6 rounded-2xl mb-8">
+                <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-upload"></i> Upload New Sound
+                </h2>
+                <form id="upload-form" class="flex flex-wrap gap-4 items-end">
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-sm text-slate-400 mb-1">Sound Name</label>
+                        <input type="text" id="sound-name" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-violet-500 transition-all">
+                    </div>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-sm text-slate-400 mb-1">Audio File</label>
+                        <input type="file" id="sound-file" required accept="audio/*" class="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-violet-600 file:text-white hover:file:bg-violet-700 cursor-pointer">
+                    </div>
+                    <button type="submit" class="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-6 rounded-lg transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> Add Sound
+                    </button>
+                </form>
+            </div>
+            <div id="sounds-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Sounds loaded here -->
+            </div>
+        </div>
+
+        <!-- Voice Tab -->
+        <div id="view-voice" class="tab-view hidden">
+            <div class="glass p-6 rounded-2xl">
+                <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-volume-high"></i> Available Voice Channels
+                </h2>
+                <div id="channels-list" class="space-y-3">
+                    <!-- Channels loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'members';
+
+        async function api(endpoint, options = {}) {
+            const response = await fetch(`/api${endpoint}`, options);
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.detail || 'API Error');
+            }
+            return response.json();
+        }
+
+        async function updateStatus() {
+            try {
+                const status = await api('/status');
+                document.getElementById('guild-status').innerText = `Connected to: ${status.guild_name}`;
+                const indicator = document.getElementById('status-indicator');
+                const text = document.getElementById('status-text');
+                
+                if (status.is_connected) {
+                    indicator.className = 'w-2 h-2 rounded-full bg-green-500';
+                    text.innerText = `In Voice: ${status.voice_channel}`;
+                } else {
+                    indicator.className = 'w-2 h-2 rounded-full bg-slate-500';
+                    text.innerText = 'Disconnected';
+                }
+            } catch (e) {
+                document.getElementById('guild-status').innerText = 'Error connecting to bot...';
+            }
+        }
+
+        async function loadMembers() {
+            const members = await api('/members');
+            const container = document.getElementById('view-members');
+            container.innerHTML = '';
+            members.forEach(m => {
+                container.innerHTML += `
+                    <div class="glass p-4 rounded-2xl flex items-center justify-between group hover:bg-white/10 transition-all">
+                        <div class="flex items-center gap-3">
+                            <img src="${m.avatar}" class="w-12 h-12 rounded-full border-2 border-slate-700">
+                            <div>
+                                <div class="font-bold text-white">${m.name}</div>
+                                <div class="text-xs text-slate-400">${m.id}</div>
+                            </div>
+                        </div>
+                        <button onclick="imitate('${m.id}')" class="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">
+                            Imitate
+                        </button>
+                    </div>
+                `;
+            });
+        }
+
+        async function imitate(memberId) {
+            try {
+                await api('/imitate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({member_id: memberId})
+                });
+                alert('Now imitating this member! Any messages sent will be mirrored.');
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        async function loadSounds() {
+            const sounds = await api('/sounds');
+            const container = document.getElementById('sounds-list');
+            container.innerHTML = '';
+            sounds.forEach(s => {
+                container.innerHTML += `
+                    <div class="glass p-4 rounded-2xl flex items-center justify-between group hover:bg-white/10 transition-all">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center text-violet-400">
+                                <i class="fa-solid fa-music"></i>
+                            </div>
+                            <div>
+                                <div class="font-bold text-white">${s.name}</div>
+                                <div class="text-xs text-slate-400">Plays: ${s.play_count} | Added by: ${s.added_by}</div>
+                            </div>
+                        </div>
+                        <button onclick="playSound('${s.name}')" class="bg-slate-700 hover:bg-violet-600 text-white w-10 h-10 rounded-full flex items-center justify-center transition-all">
+                            <i class="fa-solid fa-play"></i>
+                        </button>
+                    </div>
+                `;
+            });
+        }
+
+        async function playSound(name) {
+            try {
+                await api('/sound/play', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({sound_name: name})
+                });
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        async function loadChannels() {
+            const channels = await api('/channels');
+            const container = document.getElementById('channels-list');
+            container.innerHTML = '';
+            channels.forEach(c => {
+                container.innerHTML += `
+                    <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-violet-500 transition-all">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-volume-high text-slate-400"></i>
+                            <span class="font-medium text-slate-200">${c.name}</span>
+                        </div>
+                        <button onclick="joinVoice('${c.id}')" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-1 rounded-lg text-sm font-medium transition-colors">
+                            Join
+                        </button>
+                    </div>
+                `;
+            });
+        }
+
+        async function joinVoice(channelId) {
+            try {
+                await api('/voice/join', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({channel_id: channelId})
+                });
+                updateStatus();
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        document.getElementById('upload-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('name', document.getElementById('sound-name').value);
+            formData.append('file', document.getElementById('sound-file').files[0]);
+
+            try {
+                await api('/sound/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                alert('Sound uploaded successfully!');
+                document.getElementById('upload-form').reset();
+                loadSounds();
+            } catch (e) {
+                alert(e.message);
+            }
+        };
+
+        function showTab(tab) {
+            document.querySelectorAll('.tab-view').forEach(v => v.classList.add('hidden'));
+            document.getElementById(`view-${tab}`).classList.remove('hidden');
+            
+            document.querySelectorAll('nav button').forEach(b => {
+                b.classList.remove('tab-active');
+                b.classList.add('text-slate-400');
+            });
+            document.getElementById(`tab-${tab}`).classList.add('tab-active');
+            document.getElementById(`tab-${tab}`).classList.remove('text-slate-400');
+            
+            if (tab === 'members') loadMembers();
+            if (tab === 'sounds') loadSounds();
+            if (tab === 'voice') loadChannels();
+        }
+
+        // Init
+        setInterval(updateStatus, 5000);
+        updateStatus();
+        showTab('members');
+    </script>
+</body>
+</html>
