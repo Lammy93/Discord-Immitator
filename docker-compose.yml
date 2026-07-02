@@ -1,7 +1,6 @@
-version: '3.8'
-
 services:
   discord-bot:
+    image: discord-imitator:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -11,7 +10,6 @@ services:
       - "8000:8000"
     volumes:
       # Persist downloaded sound bites
-
       - ./sounds:/app/sounds
       # Persist SQLite database
       - ./data:/app/data
@@ -22,3 +20,4 @@ services:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       # Tell the bot where to save the sqlite database inside the persistent volume
       - DATABASE_PATH=/app/data/bot.db
+
