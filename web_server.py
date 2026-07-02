@@ -30,6 +30,7 @@ class ImitateRequest(BaseModel):
 class ImitateSendMessageRequest(BaseModel):
     guild_id: str
     member_id: str
+    channel_id: str
     message: str
 
 class VoiceJoinRequest(BaseModel):
@@ -90,6 +91,13 @@ async def imitate_member(req: ImitateRequest):
     
     try:
         member = await guild.fetch_member(int(req.member_id))
+        
+        # Attempt to change bot's nickname in this server to match the target
+        try:
+            await guild.edit(nick=member.display_name)
+        except discord.Forbidden:
+            logger.warning(f"Could not change nickname in guild {guild.id} (Missing Manage Nicknames)")
+
         database.start_imitation_session("web_admin", member.id, guild.id)
         return {"status": "success", "message": f"Now imitating {member.display_name}"}
     except Exception as e:
@@ -105,11 +113,10 @@ async def imitate_send(req: ImitateSendMessageRequest):
     try:
         member = await guild.fetch_member(int(req.member_id))
         
-        # Find a text channel to send to. We'll send it to the first available text channel.
-        # In a real scenario, you'd pass the channel_id in the request.
-        channel = guild.text_channels[0] if guild.text_channels else None
-        if not channel:
-            raise HTTPException(status_code=404, detail="No text channels found in guild")
+        # Use the provided channel_id
+        channel = guild.get_channel(int(req.channel_id))
+        if not channel or not isinstance(channel, discord.TextChannel):
+            raise HTTPException(status_code=400, detail="Invalid text channel")
             
         webhook = await get_or_create_webhook(bot, channel)
         await webhook.send(
@@ -172,6 +179,21 @@ async def upload_sound(
         raise HTTPException(status_code=400, detail="Sound name already exists")
     
     return {"status": "success", "message": f"Uploaded {name}"}
+
+@app.get("/api/text-channels")
+async def get_text_channels(guild_id: str):
+    bot = app.state.bot
+    guild = bot.get_guild(int(guild_id))
+    if not guild:
+        raise HTTPException(status_code=404, detail="Guild not found")
+    
+    channels = []
+    for channel in guild.text_channels:
+        channels.append({
+            "id": str(channel.id),
+            "name": channel.name
+        })
+    return channels
 
 @app.get("/api/channels")
 async def get_voice_channels(guild_id: str):

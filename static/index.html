@@ -90,6 +90,7 @@
 
     <script>
         let selectedGuildId = null;
+        let selectedChannelId = null;
 
         async function api(endpoint, options = {}) {
             const response = await fetch(`/api${endpoint}`, options);
@@ -136,6 +137,7 @@
 
         async function changeGuild(guildId) {
             selectedGuildId = guildId;
+            selectedChannelId = null;
             if (!guildId) {
                 document.getElementById('view-members').innerHTML = '';
                 document.getElementById('channels-list').innerHTML = '';
@@ -149,10 +151,23 @@
             if (!selectedGuildId) return;
             try {
                 const members = await api(`/members?guild_id=${selectedGuildId}`);
+                const channels = await api(`/text-channels?guild_id=${selectedGuildId}`);
                 const container = document.getElementById('view-members');
                 container.innerHTML = '';
+                
+                // Create channel selector for the member list
+                const channelHtml = `
+                    <div class="col-span-full glass p-4 rounded-2xl mb-4 flex items-center gap-3">
+                        <label class="text-sm text-slate-400">Send to Channel:</label>
+                        <select id="target-channel" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white outline-none focus:border-violet-500 transition-all">
+                            ${channels.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                        </select>
+                    </div>
+                `;
+                
+                let membersHtml = '';
                 members.forEach(m => {
-                    container.innerHTML += `
+                    membersHtml += `
                         <div class="glass p-4 rounded-2xl flex flex-col gap-4 hover:bg-white/10 transition-all">
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-3">
@@ -175,6 +190,7 @@
                         </div>
                     `;
                 });
+                container.innerHTML = channelHtml + `<div class="contents">${membersHtml}</div>`;
             } catch (e) {
                 document.getElementById('view-members').innerHTML = `<div class="col-span-full text-center text-slate-400">Error loading members: ${e.message}</div>`;
             }
@@ -196,6 +212,9 @@
 
         async function sendQuick(memberId) {
             if (!selectedGuildId) return alert('Please select a server first!');
+            const channelId = document.getElementById('target-channel')?.value;
+            if (!channelId) return alert('Please select a target channel first!');
+            
             const msg = document.getElementById(`msg-${memberId}`).value;
             if (!msg) return alert('Please enter a message!');
             
@@ -203,7 +222,12 @@
                 await api('/imitate-send', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({guild_id: selectedGuildId, member_id: memberId, message: msg})
+                    body: JSON.stringify({
+                        guild_id: selectedGuildId, 
+                        member_id: memberId, 
+                        channel_id: channelId, 
+                        message: msg
+                    })
                 });
                 alert('Message sent!');
                 document.getElementById(`msg-${memberId}`).value = '';
