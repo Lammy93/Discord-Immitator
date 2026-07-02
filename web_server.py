@@ -51,11 +51,22 @@ async def get_status():
     guild_list = []
     for g in guilds:
         voice_client = discord.utils.get(bot.voice_clients, guild=g)
+        # Fetch current imitation target for the web admin in this guild
+        target_id = database.get_imitation_session("web_admin", g.id)
+        target_name = None
+        if target_id:
+            try:
+                tm = g.get_member(int(target_id)) or await g.fetch_member(int(target_id))
+                target_name = tm.display_name if tm else f"ID: {target_id}"
+            except Exception:
+                target_name = f"ID: {target_id}"
+
         guild_list.append({
             "id": str(g.id),
             "name": g.name,
             "voice_channel": voice_client.channel.name if voice_client and voice_client.channel else None,
-            "is_connected": voice_client is not None
+            "is_connected": voice_client is not None,
+            "imitating": target_name
         })
     
     return {

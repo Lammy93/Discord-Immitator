@@ -25,6 +25,7 @@
                     <select id="guild-select" onchange="changeGuild(this.value)" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white outline-none focus:border-violet-500 transition-all">
                         <option value="">Loading servers...</option>
                     </select>
+                    <div id="imitation-status" class="text-sm font-medium text-violet-400 ml-2"></div>
                 </div>
             </div>
             <div id="voice-status" class="glass px-4 py-2 rounded-full text-sm flex items-center gap-2">
@@ -121,6 +122,8 @@
                     if (guild) {
                         const indicator = document.getElementById('status-indicator');
                         const text = document.getElementById('status-text');
+                        const imitStatus = document.getElementById('imitation-status');
+                        
                         if (guild.is_connected) {
                             indicator.className = 'w-2 h-2 rounded-full bg-green-500';
                             text.innerText = `In Voice: ${guild.voice_channel}`;
@@ -128,6 +131,8 @@
                             indicator.className = 'w-2 h-2 rounded-full bg-slate-500';
                             text.innerText = 'Disconnected';
                         }
+                        
+                        imitStatus.innerText = guild.imitating ? `🎭 Imitating: ${guild.imitating}` : '';
                     }
                 }
             } catch (e) {
