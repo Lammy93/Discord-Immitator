@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width,, initial-scale=1.0">
     <title>Discord Imitator Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -46,11 +46,47 @@
             <button onclick="showTab('members')" id="tab-members" class="pb-2 px-1 font-medium tab-active transition-colors">Members</button>
             <button onclick="showTab('sounds')" id="tab-sounds" class="pb-2 px-1 font-medium text-slate-400 hover:text-white transition-colors">Soundboard</button>
             <button onclick="showTab('voice')" id="tab-voice" class="pb-2 px-1 font-medium text-slate-400 hover:text-white transition-colors">Voice Channels</button>
+            <button onclick="showTab('settings')" id="tab-settings" class="pb-2 px-1 font-medium text-slate-400 hover:text-white transition-colors">Settings</button>
         </nav>
 
         <!-- Member Tab -->
-        <div id="view-members" class="tab-view grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <!-- Members loaded here -->
+        <div id="view-members" class="tab-view space-y-6">
+            <!-- Global Quick Send (Hidden by default) -->
+            <div id="global-send-box" class="hidden glass p-6 rounded-2xl border-violet-500/50 bg-violet-500/10 transition-all animate-in fade-in slide-in-from-top-4 duration-300">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-paper-plane text-violet-400"></i> Quick Mirror: <span id="active-mirror-name" class="text-violet-400">None</span>
+                    </h3>
+                    <button onclick="clearMirror()" class="text-slate-400 hover:text-white text-sm transition-colors">
+                        <i class="fa-solid fa-times"></i> Close
+                    </button>
+                </div>
+                <div class="flex flex-col gap-4">
+                    <div class="flex items-center gap-3">
+                        <label class="text-sm text-slate-400 whitespace-nowrap">Target Channel:</label>
+                        <select id="target-channel" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white outline-none focus:border-violet-500 transition-all">
+                            <!-- Channels loaded here -->
+                        </select>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="global-msg" placeholder="Type your message here..." class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-violet-500 transition-all">
+                        <button onclick="sendQuick()" class="bg-violet-600 hover:bg-violet-700 text-white px-6 py-2 rounded-lg font-bold transition-all flex items-center gap-2">
+                            Send <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs text-slate-500 uppercase font-bold">Mention User:</label>
+                        <select id="mention-select" onchange="mentionUser(this.value)" class="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-300 outline-none focus:border-violet-500 transition-all">
+                            <option value="">Select member to @</option>
+                            <!-- Members loaded here -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="members-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Members loaded here -->
+            </div>
         </div>
 
         <!-- Sounds Tab -->
@@ -66,7 +102,7 @@
                     </div>
                     <div class="flex-1 min-w-[200px]">
                         <label class="block text-sm text-slate-400 mb-1">Audio File</label>
-                        <input type="file" id="sound-file" required accept="audio/*" class="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-violet-600 file:text-white hover:file:bg-violet-700 cursor-pointer">
+                        <input type="file" id="sound-file" required accept="audio/*" multiple class="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-violet-600 file:text-white hover:file:bg-violet-700 cursor-pointer">
                     </div>
                     <button type="submit" class="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-6 rounded-lg transition-all flex items-center gap-2">
                         <i class="fa-solid fa-plus"></i> Add Sound
@@ -94,11 +130,48 @@
                 </div>
             </div>
         </div>
+
+        <!-- Settings Tab -->
+        <div id="view-settings" class="tab-view hidden">
+            <div class="glass p-6 rounded-2xl max-w-2xl mx-auto">
+                <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+                    <i class="fa-solid fa-user-gear"></i> Bot Presence Settings
+                </h2>
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-2">Status</label>
+                        <select id="status-select" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-violet-500 transition-all">
+                            <option value="online">Online 🟢</option>
+                            <option value="idle">Idle 🌙</option>
+                            <option value="dnd">Do Not Disturb 🔴</option>
+                            <option value="invisible">Invisible ⚪</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-2">Activity Type</label>
+                        <select id="activity-type" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-violet-500 transition-all">
+                            <option value="playing">Playing</option>
+                            <option value="watching">Watching</option>
+                            <option value="listening">Listening to</option>
+                            <option value="competing">Competing in</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-2">Activity Text</label>
+                        <input type="text" id="activity-name" placeholder="e.g. a game of Chess" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-violet-500 transition-all">
+                    </div>
+                    <button onclick="updatePresence()" class="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-save"></i> Save Presence
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
         let selectedGuildId = null;
-        let selectedChannelId = null;
+        let selectedMemberId = null;
+        let selectedMemberName = '';
 
         async function api(endpoint, options = {}) {
             const response = await fetch(`/api${endpoint}`, options);
@@ -140,7 +213,6 @@
                         }
                         
                         if (guild.imitating) {
-                            // Extract ID from "ID: 12345" or just use the name
                             const name = guild.imitating;
                             const avatarUrl = await fetchAvatar(name);
                             imitStatus.innerHTML = `
@@ -158,17 +230,16 @@
         }
 
         async function fetchAvatar(nameOrId) {
-            // If it's just a name, we can't easily get the avatar without a member fetch.
-            // For simplicity, we'll just return a default or try to find the member.
-            // Ideally, the backend should send the avatar URL in /api/status.
             return 'https://cdn.discordapp.com/embed/avatars/0.png';
         }
 
         async function changeGuild(guildId) {
             selectedGuildId = guildId;
-            selectedChannelId = null;
+            selectedMemberId = null;
+            selectedMemberName = '';
+            document.getElementById('global-send-box').classList.add('hidden');
             if (!guildId) {
-                document.getElementById('view-members').innerHTML = '';
+                document.getElementById('members-grid').innerHTML = '';
                 document.getElementById('channels-list').innerHTML = '';
                 return;
             }
@@ -181,17 +252,12 @@
             try {
                 const members = await api(`/members?guild_id=${selectedGuildId}`);
                 const channels = await api(`/text-channels?guild_id=${selectedGuildId}`);
-                const container = document.getElementById('view-members');
-                container.innerHTML = '';
+                const grid = document.getElementById('members-grid');
+                grid.innerHTML = '';
                 
-                const channelHtml = `
-                    <div class="col-span-full glass p-4 rounded-2xl mb-4 flex items-center gap-3">
-                        <label class="text-sm text-slate-400">Send to Channel:</label>
-                        <select id="target-channel" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white outline-none focus:border-violet-500 transition-all">
-                            ${channels.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
-                        </select>
-                    </div>
-                `;
+                // Update global channel selector
+                const channelSelect = document.getElementById('target-channel');
+                channelSelect.innerHTML = channels.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
                 
                 let membersHtml = '';
                 members.forEach(m => {
@@ -209,46 +275,50 @@
                                     <a href="${m.avatar}" target="_blank" download="avatar_${m.id}.png" class="p-2 text-slate-400 hover:text-white transition-colors" title="View/Download Avatar">
                                         <i class="fa-solid fa-download"></i>
                                     </a>
-                                    <button onclick="imitate('${m.id}')" class="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">
+                                    <button onclick="selectForMirror('${m.id}', '${m.name}')" class="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">
                                         Mirror
                                     </button>
                                 </div>
                             </div>
-                            <div class="flex gap-2">
-                                <input type="text" id="msg-${m.id}" placeholder="Message to send..." class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white outline-none focus:border-violet-500 transition-all">
-                                <button onclick="sendQuick('${m.id}')" class="bg-slate-700 hover:bg-violet-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">
-                                    Send
-                                </button>
-                            </div>
                         </div>
                     `;
                 });
-                container.innerHTML = channelHtml + `<div class="contents">${membersHtml}</div>`;
+                grid.innerHTML = membersHtml;
             } catch (e) {
-                document.getElementById('view-members').innerHTML = `<div class="col-span-full text-center text-slate-400">Error loading members: ${e.message}</div>`;
+                document.getElementById('members-grid').innerHTML = `<div class="col-span-full text-center text-slate-400">Error loading members: ${e.message}</div>`;
             }
         }
 
-        async function imitate(memberId) {
-            if (!selectedGuildId) return alert('Please select a server first!');
-            try {
-                await api('/imitate', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({guild_id: selectedGuildId, member_id: memberId})
-                });
-                alert('Now imitating this member!');
-            } catch (e) {
-                alert(e.message);
-            }
+        function selectForMirror(memberId, memberName) {
+            selectedMemberId = memberId;
+            selectedMemberName = memberName;
+            
+            const box = document.getElementById('global-send-box');
+            const nameDisplay = document.getElementById('active-mirror-name');
+            
+            box.classList.remove('hidden');
+            nameDisplay.innerText = memberName;
+            document.getElementById('global-msg').focus();
         }
 
-        async function sendQuick(memberId) {
+        function clearMirror() {
+            if (selectedGuildId) {
+                api(`/imitate/reset?guild_id=${selectedGuildId}`, { method: 'POST' })
+                .catch(e => console.error("Failed to reset identity:", e));
+            }
+            selectedMemberId = null;
+            selectedMemberName = '';
+            document.getElementById('global-send-box').classList.add('hidden');
+        }
+
+        async function sendQuick() {
             if (!selectedGuildId) return alert('Please select a server first!');
+            if (!selectedMemberId) return alert('Please select a member to mirror first!');
+            
             const channelId = document.getElementById('target-channel')?.value;
             if (!channelId) return alert('Please select a target channel first!');
             
-            const msg = document.getElementById(`msg-${memberId}`).value;
+            const msg = document.getElementById('global-msg').value;
             if (!msg) return alert('Please enter a message!');
             
             try {
@@ -257,16 +327,23 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         guild_id: selectedGuildId, 
-                        member_id: memberId, 
+                        member_id: selectedMemberId, 
                         channel_id: channelId, 
                         message: msg
                     })
                 });
-                alert('Message sent!');
-                document.getElementById(`msg-${memberId}`).value = '';
+                alert(`Message sent as ${selectedMemberName}!`);
+                document.getElementById('global-msg').value = '';
             } catch (e) {
                 alert(e.message);
             }
+        }
+
+        function mentionUser(memberId) {
+            if (!memberId) return;
+            const input = document.getElementById('global-msg');
+            input.value += `<@${memberId}> `;
+            input.focus();
         }
 
         async function loadSounds() {
@@ -364,21 +441,37 @@
 
         document.getElementById('upload-form').onsubmit = async (e) => {
             e.preventDefault();
-            const formData = new FormData();
-            formData.append('name', document.getElementById('sound-name').value);
-            formData.append('file', document.getElementById('sound-file').files[0]);
+            const files = document.getElementById('sound-file').files;
+            const nameInput = document.getElementById('sound-name').value;
+            
+            if (files.length === 0) return;
 
-            try {
-                await api('/sound/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                alert('Sound uploaded successfully!');
-                document.getElementById('upload-form').reset();
-                loadSounds();
-            } catch (e) {
-                alert(e.message);
+            let successCount = 0;
+            let failCount = 0;
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const soundName = (i === 0 && nameInput) ? nameInput : file.name.split('.').slice(0, -1).join('.');
+                
+                const formData = new FormData();
+                formData.append('name', soundName);
+                formData.append('file', file);
+
+                try {
+                    await api('/sound/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    successCount++;
+                } catch (err) {
+                    console.error(`Failed to upload ${file.name}:`, err);
+                    failCount++;
+                }
             }
+            
+            alert(`Upload complete!\n✅ Success: ${successCount}\n❌ Failed: ${failCount}`);
+            document.getElementById('upload-form').reset();
+            loadSounds();
         };
 
         function showTab(tab) {

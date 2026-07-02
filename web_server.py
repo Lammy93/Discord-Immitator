@@ -41,6 +41,11 @@ class SoundPlayRequest(BaseModel):
     guild_id: str
     sound_name: str
 
+class PresenceRequest(BaseModel):
+    status: str  # online, idle, dnd, invisible
+    activity_type: str  # playing, watching, listening, competing
+    activity_name: str
+
 @app.get("/api/status")
 async def get_status():
     bot = app.state.bot
@@ -72,6 +77,38 @@ async def get_status():
     return {
         "guilds": guild_list
     }
+
+@app.post("/api/status/update")
+async def update_presence(req: PresenceRequest):
+    bot = app.state.bot
+    
+    # Map status string to discord.Status
+    status_map = {
+        "online": discord.Status.online,
+        "idle": discord.Status.idle,
+        "dnd": discord.Status.dnd,
+        "invisible": discord.Status.invisible
+    }
+    
+    # Map activity type string to discord.ActivityType
+    type_map = {
+        "playing": discord.ActivityType.playing,
+        "watching": discord.ActivityType.watching,
+        "listening": discord.ActivityType.listening,
+        "competing": discord.ActivityType.competing
+    }
+    
+    try:
+        status = status_map.get(req.status, discord.Status.online)
+        act_type = type_map.get(req.activity_type, discord.ActivityType.playing)
+        
+        await bot.change_presence(
+            status=status,
+            activity=discord.Activity(type=act_type, name=req.activity_name)
+        )
+        return {"status": "success", "message": "Presence updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/members")
 async def get_members(guild_id: str):
@@ -113,6 +150,25 @@ async def imitate_member(req: ImitateRequest):
         return {"status": "success", "message": f"Now imitating {member.display_name}"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/imitate/reset")
+async def reset_imitation(guild_id: str):
+    bot = app.state.bot
+    guild = bot.get_guild(int(guild_id))
+    if not guild:
+        raise HTTPException(status_code=404, detail="Guild not found")
+    
+    try:
+        # Reset nickname to None (returns it to the default bot name)
+        await guild.me.edit(nick=None)
+        database.stop_imitation_session("web_admin", guild.id) # This is a bit vague, maybe a better function?
+        # Wait, stop_imitation_session needs user_id. a general "clear all" for the admin would be:
+        # Let's just clear the specific admin session.
+        database.stop_imitation_session("web_admin", guild.id)
+        
+        return {"status": "success", "message": "Identity reset successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/imitate-send")
 async def imitate_send(req: ImitateSendMessageRequest):
