@@ -97,8 +97,8 @@
                 </h2>
                 <form id="upload-form" class="flex flex-wrap gap-4 items-end">
                     <div class="flex-1 min-w-[200px]">
-                        <label class="block text-sm text-slate-400 mb-1">Sound Name</label>
-                        <input type="text" id="sound-name" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-violet-500 transition-all">
+                        <label class="block text-sm text-slate-400 mb-1">Sound Name <span class="text-xs text-slate-500">(optional with multiple files)</span></label>
+                        <input type="text" id="sound-name" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-violet-500 transition-all">
                     </div>
                     <div class="flex-1 min-w-[200px]">
                         <label class="block text-sm text-slate-400 mb-1">Audio File</label>
@@ -213,11 +213,10 @@
                         }
                         
                         if (guild.imitating) {
-                            const name = guild.imitating;
-                            const avatarUrl = await fetchAvatar(name);
+                            const avatar = guild.imitating_avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png';
                             imitStatus.innerHTML = `
-                                <img src="${avatarUrl}" class="w-5 h-5 rounded-full border border-violet-400">
-                                <span>Imitating: ${name}</span>
+                                <img src="${avatar}" class="w-5 h-5 rounded-full border border-violet-400">
+                                <span>Imitating: ${guild.imitating}</span>
                             `;
                         } else {
                             imitStatus.innerText = '';
@@ -227,10 +226,6 @@
             } catch (e) {
                 console.error('Status update failed:', e);
             }
-        }
-
-        async function fetchAvatar(nameOrId) {
-            return 'https://cdn.discordapp.com/embed/avatars/0.png';
         }
 
         async function changeGuild(guildId) {
@@ -258,6 +253,15 @@
                 // Update global channel selector
                 const channelSelect = document.getElementById('target-channel');
                 channelSelect.innerHTML = channels.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+                
+                const mentionSelect = document.getElementById('mention-select');
+                mentionSelect.innerHTML = '<option value="">Select member to @</option>';
+                members.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.text = m.name;
+                    mentionSelect.appendChild(opt);
+                });
                 
                 let membersHtml = '';
                 members.forEach(m => {
@@ -289,9 +293,19 @@
             }
         }
 
-        function selectForMirror(memberId, memberName) {
+        async function selectForMirror(memberId, memberName) {
             selectedMemberId = memberId;
             selectedMemberName = memberName;
+            
+            try {
+                await api('/imitate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({guild_id: selectedGuildId, member_id: memberId})
+                });
+            } catch (e) {
+                console.error("Failed to start imitation:", e);
+            }
             
             const box = document.getElementById('global-send-box');
             const nameDisplay = document.getElementById('active-mirror-name');
@@ -299,6 +313,7 @@
             box.classList.remove('hidden');
             nameDisplay.innerText = memberName;
             document.getElementById('global-msg').focus();
+            updateStatus();
         }
 
         function clearMirror() {
@@ -309,6 +324,7 @@
             selectedMemberId = null;
             selectedMemberName = '';
             document.getElementById('global-send-box').classList.add('hidden');
+            updateStatus();
         }
 
         async function sendQuick() {
@@ -439,37 +455,53 @@
             }
         }
 
+        async function updatePresence() {
+            const status = document.getElementById('status-select').value;
+            const activityType = document.getElementById('activity-type').value;
+            const activityName = document.getElementById('activity-name').value;
+            try {
+                await api('/status/update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({status, activity_type: activityType, activity_name: activityName})
+                });
+                alert('Presence updated!');
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
         document.getElementById('upload-form').onsubmit = async (e) => {
             e.preventDefault();
             const files = document.getElementById('sound-file').files;
             const nameInput = document.getElementById('sound-name').value;
-            
+
             if (files.length === 0) return;
 
             let successCount = 0;
             let failCount = 0;
 
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                const soundName = (i === 0 && nameInput) ? nameInput : file.name.split('.').slice(0, -1).join('.');
-                
+            if (files.length === 1 && nameInput) {
                 const formData = new FormData();
-                formData.append('name', soundName);
-                formData.append('file', file);
-
+                formData.append('name', nameInput);
+                formData.append('file', files[0]);
                 try {
-                    await api('/sound/upload', {
-                        method: 'POST',
-                        body: formData
-                    });
+                    await api('/sound/upload', { method: 'POST', body: formData });
                     successCount++;
-                } catch (err) {
-                    console.error(`Failed to upload ${file.name}:`, err);
-                    failCount++;
+                } catch (err) { failCount++; }
+            } else {
+                const formData = new FormData();
+                for (const file of files) {
+                    formData.append('files', file);
                 }
+                try {
+                    const result = await api('/sound/upload-multiple', { method: 'POST', body: formData });
+                    successCount = result.results.success.length;
+                    failCount = result.results.failed.length;
+                } catch (err) { failCount = files.length; }
             }
-            
-            alert(`Upload complete!\n✅ Success: ${successCount}\n❌ Failed: ${failCount}`);
+
+            alert(`Uploaded ${successCount} sound(s)${failCount ? `, ${failCount} failed` : ''}`);
             document.getElementById('upload-form').reset();
             loadSounds();
         };

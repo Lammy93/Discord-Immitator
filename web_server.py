@@ -1,6 +1,7 @@
 import os
 import logging
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from typing import List
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
@@ -56,13 +57,17 @@ async def get_status():
     guild_list = []
     for g in guilds:
         voice_client = discord.utils.get(bot.voice_clients, guild=g)
-        # Fetch current imitation target for the web admin in this guild
         target_id = database.get_imitation_session("web_admin", g.id)
         target_name = None
+        target_avatar_url = None
+        target_member_id = None
         if target_id:
             try:
                 tm = g.get_member(int(target_id)) or await g.fetch_member(int(target_id))
-                target_name = tm.display_name if tm else f"ID: {target_id}"
+                if tm:
+                    target_name = tm.display_name
+                    target_avatar_url = str(tm.display_avatar.url)
+                    target_member_id = str(tm.id)
             except Exception:
                 target_name = f"ID: {target_id}"
 
@@ -71,7 +76,9 @@ async def get_status():
             "name": g.name,
             "voice_channel": voice_client.channel.name if voice_client and voice_client.channel else None,
             "is_connected": voice_client is not None,
-            "imitating": target_name
+            "imitating": target_name,
+            "imitating_avatar_url": target_avatar_url,
+            "imitating_member_id": target_member_id
         })
     
     return {
@@ -246,6 +253,27 @@ async def upload_sound(
         raise HTTPException(status_code=400, detail="Sound name already exists")
     
     return {"status": "success", "message": f"Uploaded {name}"}
+
+@app.post("/api/sound/upload-multiple")
+async def upload_multiple_sounds(files: List[UploadFile] = File(...)):
+    results = {"success": [], "failed": []}
+    for file in files:
+        name = os.path.splitext(file.filename)[0]
+        ext = os.path.splitext(file.filename)[1].lower()
+        filename = f"{name.lower()}{ext}"
+        file_path = os.path.join("sounds", filename)
+
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+
+        ok = database.add_soundbite(name, file_path, "WebUI Admin")
+        if ok:
+            results["success"].append(name)
+        else:
+            results["failed"].append(file.filename)
+
+    return {"results": results, "message": f"Uploaded {len(results['success'])} sound(s)"}
 
 @app.get("/api/text-channels")
 async def get_text_channels(guild_id: str):
