@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 import database
 import discord
+import discord.sinks
 
 logger = logging.getLogger("discord_bot.web_server")
 
@@ -362,13 +363,17 @@ async def stop_recording(req: VoiceJoinRequest):
 async def on_recording_finished(sink, guild_id):
     import datetime
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    os.makedirs("recordings", exist_ok=True)
+    saved = 0
     for uid, ad in sink.audio_data.items():
-        ad.file.seek(0)
-        path = os.path.join("recordings", f"recording_{uid}_{ts}.wav")
-        with open(path, "wb") as f:
-            f.write(ad.file.read())
-    logger.info(f"Recording saved for guild {guild_id}: {len(sink.audio_data)} file(s)")
+        try:
+            ad.file.seek(0)
+            path = os.path.join("recordings", f"recording_{uid}_{ts}.wav")
+            with open(path, "wb") as f:
+                f.write(ad.file.read())
+            saved += 1
+        except Exception as e:
+            logger.warning(f"Failed to save recording for user {uid}: {e}")
+    logger.info(f"Recording saved for guild {guild_id}: {saved} file(s)")
 
 @app.get("/api/voice/recordings")
 async def list_recordings():
