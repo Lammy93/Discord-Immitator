@@ -11,10 +11,8 @@ services:
       - ./sounds:/app/sounds
       # Persist SQLite database
       - ./data:/app/data
-    env_file:
-      - .env
     environment:
-      # Inject Discord Token from .env file
+      # The token is provided via Portainer Environment Variables
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       # Tell the bot where to save the sqlite database inside the persistent volume
       - DATABASE_PATH=/app/data/bot.db
