@@ -25,12 +25,19 @@
                     <select id="guild-select" onchange="changeGuild(this.value)" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white outline-none focus:border-violet-500 transition-all">
                         <option value="">Loading servers...</option>
                     </select>
-                    <div id="imitation-status" class="text-sm font-medium text-violet-400 ml-2"></div>
+                    <div id="imitation-status" class="flex items-center gap-2 text-sm font-medium text-violet-400 ml-2">
+                        <!-- Status updated via JS -->
+                    </div>
                 </div>
             </div>
-            <div id="voice-status" class="glass px-4 py-2 rounded-full text-sm flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-slate-500" id="status-indicator"></span>
-                <span id="status-text">Disconnected</span>
+            <div class="flex items-center gap-4">
+                <a href="https://discord.com/developers/applications" target="_blank" class="glass px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-gear"></i> Developer Portal
+                </a>
+                <div id="voice-status" class="glass px-4 py-2 rounded-full text-sm flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-slate-500" id="status-indicator"></span>
+                    <span id="status-text">Disconnected</span>
+                </div>
             </div>
         </header>
 
@@ -132,12 +139,29 @@
                             text.innerText = 'Disconnected';
                         }
                         
-                        imitStatus.innerText = guild.imitating ? `🎭 Imitating: ${guild.imitating}` : '';
+                        if (guild.imitating) {
+                            // Extract ID from "ID: 12345" or just use the name
+                            const name = guild.imitating;
+                            const avatarUrl = await fetchAvatar(name);
+                            imitStatus.innerHTML = `
+                                <img src="${avatarUrl}" class="w-5 h-5 rounded-full border border-violet-400">
+                                <span>Imitating: ${name}</span>
+                            `;
+                        } else {
+                            imitStatus.innerText = '';
+                        }
                     }
                 }
             } catch (e) {
                 console.error('Status update failed:', e);
             }
+        }
+
+        async function fetchAvatar(nameOrId) {
+            // If it's just a name, we can't easily get the avatar without a member fetch.
+            // For simplicity, we'll just return a default or try to find the member.
+            // Ideally, the backend should send the avatar URL in /api/status.
+            return 'https://cdn.discordapp.com/embed/avatars/0.png';
         }
 
         async function changeGuild(guildId) {
@@ -160,7 +184,6 @@
                 const container = document.getElementById('view-members');
                 container.innerHTML = '';
                 
-                // Create channel selector for the member list
                 const channelHtml = `
                     <div class="col-span-full glass p-4 rounded-2xl mb-4 flex items-center gap-3">
                         <label class="text-sm text-slate-400">Send to Channel:</label>
@@ -182,9 +205,14 @@
                                         <div class="text-xs text-slate-400">${m.id}</div>
                                     </div>
                                 </div>
-                                <button onclick="imitate('${m.id}')" class="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">
-                                    Mirror
-                                </button>
+                                <div class="flex gap-2">
+                                    <a href="${m.avatar}" target="_blank" download="avatar_${m.id}.png" class="p-2 text-slate-400 hover:text-white transition-colors" title="View/Download Avatar">
+                                        <i class="fa-solid fa-download"></i>
+                                    </a>
+                                    <button onclick="imitate('${m.id}')" class="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">
+                                        Mirror
+                                    </button>
+                                </div>
                             </div>
                             <div class="flex gap-2">
                                 <input type="text" id="msg-${m.id}" placeholder="Message to send..." class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white outline-none focus:border-violet-500 transition-all">
