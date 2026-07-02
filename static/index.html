@@ -20,7 +20,12 @@
                 <h1 class="text-4xl font-bold text-white flex items-center gap-3">
                     <i class="fa-solid fa-mask text-violet-500"></i> Imitator Dashboard
                 </h1>
-                <p id="guild-status" class="text-slate-400 mt-1">Connecting to bot...</p>
+                <div class="flex items-center gap-3 mt-2">
+                    <label class="text-sm text-slate-400">Select Server:</label>
+                    <select id="guild-select" onchange="changeGuild(this.value)" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white outline-none focus:border-violet-500 transition-all">
+                        <option value="">Loading servers...</option>
+                    </select>
+                </div>
             </div>
             <div id="voice-status" class="glass px-4 py-2 rounded-full text-sm flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full bg-slate-500" id="status-indicator"></span>
@@ -68,9 +73,14 @@
         <!-- Voice Tab -->
         <div id="view-voice" class="tab-view hidden">
             <div class="glass p-6 rounded-2xl">
-                <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
-                    <i class="fa-solid fa-volume-high"></i> Available Voice Channels
-                </h2>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold flex items-center gap-2">
+                        <i class="fa-solid fa-volume-high"></i> Available Voice Channels
+                    </h2>
+                    <button onclick="disconnectVoice()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-phone-slash"></i> Disconnect
+                    </button>
+                </div>
                 <div id="channels-list" class="space-y-3">
                     <!-- Channels loaded here -->
                 </div>
@@ -79,7 +89,7 @@
     </div>
 
     <script>
-        let currentTab = 'members';
+        let selectedGuildId = null;
 
         async function api(endpoint, options = {}) {
             const response = await fetch(`/api${endpoint}`, options);
@@ -92,88 +102,151 @@
 
         async function updateStatus() {
             try {
-                const status = await api('/status');
-                document.getElementById('guild-status').innerText = `Connected to: ${status.guild_name}`;
-                const indicator = document.getElementById('status-indicator');
-                const text = document.getElementById('status-text');
+                const data = await api('/status');
+                const guildSelect = document.getElementById('guild-select');
+                const currentVal = guildSelect.value;
                 
-                if (status.is_connected) {
-                    indicator.className = 'w-2 h-2 rounded-full bg-green-500';
-                    text.innerText = `In Voice: ${status.voice_channel}`;
-                } else {
-                    indicator.className = 'w-2 h-2 rounded-full bg-slate-500';
-                    text.innerText = 'Disconnected';
+                guildSelect.innerHTML = '<option value="">-- Select Server --</option>';
+                data.guilds.forEach(g => {
+                    const opt = document.createElement('option');
+                    opt.value = g.id;
+                    opt.text = g.name;
+                    if (g.id === currentVal) opt.selected = true;
+                    guildSelect.appendChild(opt);
+                });
+
+                if (selectedGuildId) {
+                    const guild = data.guilds.find(g => g.id === selectedGuildId);
+                    if (guild) {
+                        const indicator = document.getElementById('status-indicator');
+                        const text = document.getElementById('status-text');
+                        if (guild.is_connected) {
+                            indicator.className = 'w-2 h-2 rounded-full bg-green-500';
+                            text.innerText = `In Voice: ${guild.voice_channel}`;
+                        } else {
+                            indicator.className = 'w-2 h-2 rounded-full bg-slate-500';
+                            text.innerText = 'Disconnected';
+                        }
+                    }
                 }
             } catch (e) {
-                document.getElementById('guild-status').innerText = 'Error connecting to bot...';
+                console.error('Status update failed:', e);
             }
         }
 
+        async function changeGuild(guildId) {
+            selectedGuildId = guildId;
+            if (!guildId) {
+                document.getElementById('view-members').innerHTML = '';
+                document.getElementById('channels-list').innerHTML = '';
+                return;
+            }
+            loadMembers();
+            loadChannels();
+        }
+
         async function loadMembers() {
-            const members = await api('/members');
-            const container = document.getElementById('view-members');
-            container.innerHTML = '';
-            members.forEach(m => {
-                container.innerHTML += `
-                    <div class="glass p-4 rounded-2xl flex items-center justify-between group hover:bg-white/10 transition-all">
-                        <div class="flex items-center gap-3">
-                            <img src="${m.avatar}" class="w-12 h-12 rounded-full border-2 border-slate-700">
-                            <div>
-                                <div class="font-bold text-white">${m.name}</div>
-                                <div class="text-xs text-slate-400">${m.id}</div>
+            if (!selectedGuildId) return;
+            try {
+                const members = await api(`/members?guild_id=${selectedGuildId}`);
+                const container = document.getElementById('view-members');
+                container.innerHTML = '';
+                members.forEach(m => {
+                    container.innerHTML += `
+                        <div class="glass p-4 rounded-2xl flex flex-col gap-4 hover:bg-white/10 transition-all">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <img src="${m.avatar}" class="w-12 h-12 rounded-full border-2 border-slate-700">
+                                    <div>
+                                        <div class="font-bold text-white">${m.name}</div>
+                                        <div class="text-xs text-slate-400">${m.id}</div>
+                                    </div>
+                                </div>
+                                <button onclick="imitate('${m.id}')" class="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">
+                                    Mirror
+                                </button>
+                            </div>
+                            <div class="flex gap-2">
+                                <input type="text" id="msg-${m.id}" placeholder="Message to send..." class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1 text-sm text-white outline-none focus:border-violet-500 transition-all">
+                                <button onclick="sendQuick('${m.id}')" class="bg-slate-700 hover:bg-violet-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">
+                                    Send
+                                </button>
                             </div>
                         </div>
-                        <button onclick="imitate('${m.id}')" class="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors">
-                            Imitate
-                        </button>
-                    </div>
-                `;
-            });
+                    `;
+                });
+            } catch (e) {
+                document.getElementById('view-members').innerHTML = `<div class="col-span-full text-center text-slate-400">Error loading members: ${e.message}</div>`;
+            }
         }
 
         async function imitate(memberId) {
+            if (!selectedGuildId) return alert('Please select a server first!');
             try {
                 await api('/imitate', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({member_id: memberId})
+                    body: JSON.stringify({guild_id: selectedGuildId, member_id: memberId})
                 });
-                alert('Now imitating this member! Any messages sent will be mirrored.');
+                alert('Now imitating this member!');
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        async function sendQuick(memberId) {
+            if (!selectedGuildId) return alert('Please select a server first!');
+            const msg = document.getElementById(`msg-${memberId}`).value;
+            if (!msg) return alert('Please enter a message!');
+            
+            try {
+                await api('/imitate-send', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({guild_id: selectedGuildId, member_id: memberId, message: msg})
+                });
+                alert('Message sent!');
+                document.getElementById(`msg-${memberId}`).value = '';
             } catch (e) {
                 alert(e.message);
             }
         }
 
         async function loadSounds() {
-            const sounds = await api('/sounds');
-            const container = document.getElementById('sounds-list');
-            container.innerHTML = '';
-            sounds.forEach(s => {
-                container.innerHTML += `
-                    <div class="glass p-4 rounded-2xl flex items-center justify-between group hover:bg-white/10 transition-all">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center text-violet-400">
-                                <i class="fa-solid fa-music"></i>
+            try {
+                const sounds = await api('/sounds');
+                const container = document.getElementById('sounds-list');
+                container.innerHTML = '';
+                sounds.forEach(s => {
+                    container.innerHTML += `
+                        <div class="glass p-4 rounded-2xl flex items-center justify-between group hover:bg-white/10 transition-all">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center text-violet-400">
+                                    <i class="fa-solid fa-music"></i>
+                                </div>
+                                <div>
+                                    <div class="font-bold text-white">${s.name}</div>
+                                    <div class="text-xs text-slate-400">Plays: ${s.play_count} | Added by: ${s.added_by}</div>
+                                </div>
                             </div>
-                            <div>
-                                <div class="font-bold text-white">${s.name}</div>
-                                <div class="text-xs text-slate-400">Plays: ${s.play_count} | Added by: ${s.added_by}</div>
-                            </div>
+                            <button onclick="playSound('${s.name}')" class="bg-slate-700 hover:bg-violet-600 text-white w-10 h-10 rounded-full flex items-center justify-center transition-all">
+                                <i class="fa-solid fa-play"></i>
+                            </button>
                         </div>
-                        <button onclick="playSound('${s.name}')" class="bg-slate-700 hover:bg-violet-600 text-white w-10 h-10 rounded-full flex items-center justify-center transition-all">
-                            <i class="fa-solid fa-play"></i>
-                        </button>
-                    </div>
-                `;
-            });
+                    `;
+                });
+            } catch (e) {
+                document.getElementById('sounds-list').innerHTML = `<div class="col-span-full text-center text-slate-400">Error loading sounds: ${e.message}</div>`;
+            }
         }
 
         async function playSound(name) {
+            if (!selectedGuildId) return alert('Please select a server first!');
             try {
                 await api('/sound/play', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({sound_name: name})
+                    body: JSON.stringify({guild_id: selectedGuildId, sound_name: name})
                 });
             } catch (e) {
                 alert(e.message);
@@ -181,30 +254,50 @@
         }
 
         async function loadChannels() {
-            const channels = await api('/channels');
-            const container = document.getElementById('channels-list');
-            container.innerHTML = '';
-            channels.forEach(c => {
-                container.innerHTML += `
-                    <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-violet-500 transition-all">
-                        <div class="flex items-center gap-3">
-                            <i class="fa-solid fa-volume-high text-slate-400"></i>
-                            <span class="font-medium text-slate-200">${c.name}</span>
+            if (!selectedGuildId) return;
+            try {
+                const channels = await api(`/channels?guild_id=${selectedGuildId}`);
+                const container = document.getElementById('channels-list');
+                container.innerHTML = '';
+                channels.forEach(c => {
+                    container.innerHTML += `
+                        <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-violet-500 transition-all">
+                            <div class="flex items-center gap-3">
+                                <i class="fa-solid fa-volume-high text-slate-400"></i>
+                                <span class="font-medium text-slate-200">${c.name}</span>
+                            </div>
+                            <button onclick="joinVoice('${c.id}')" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-1 rounded-lg text-sm font-medium transition-colors">
+                                Join
+                            </button>
                         </div>
-                        <button onclick="joinVoice('${c.id}')" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-1 rounded-lg text-sm font-medium transition-colors">
-                            Join
-                        </button>
-                    </div>
-                `;
-            });
+                    `;
+                });
+            } catch (e) {
+                document.getElementById('channels-list').innerHTML = `<div class="text-center text-slate-400">Error loading channels: ${e.message}</div>`;
+            }
         }
 
         async function joinVoice(channelId) {
+            if (!selectedGuildId) return alert('Please select a server first!');
             try {
                 await api('/voice/join', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({channel_id: channelId})
+                    body: JSON.stringify({guild_id: selectedGuildId, channel_id: channelId})
+                });
+                updateStatus();
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        async function disconnectVoice() {
+            if (!selectedGuildId) return alert('Please select a server first!');
+            try {
+                await api('/voice/disconnect', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({guild_id: selectedGuildId})
                 });
                 updateStatus();
             } catch (e) {
@@ -247,7 +340,6 @@
             if (tab === 'voice') loadChannels();
         }
 
-        // Init
         setInterval(updateStatus, 5000);
         updateStatus();
         showTab('members');
