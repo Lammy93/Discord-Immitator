@@ -2,7 +2,7 @@ import os
 import logging
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 import database
 import discord
@@ -14,6 +14,10 @@ app = FastAPI(title="Discord Imitator Web UI")
 # We will inject the bot instance into the app state on startup
 def set_bot(bot_instance):
     app.state.bot = bot_instance
+
+@app.get("/")
+async def read_index():
+    return FileResponse("static/index.html")
 
 class ImitateRequest(BaseModel):
     member_id: str
