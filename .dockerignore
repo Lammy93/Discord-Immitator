@@ -19,7 +19,6 @@ docker-compose.yml
 
 # Data
 sounds/
-recordings/
 data/
 bot.db
 

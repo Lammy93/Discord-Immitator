@@ -25,11 +25,6 @@ A powerful Discord bot that imitates other guild members via webhooks, manages a
 - **Sound Management** — list all sounds with play counts, delete unwanted ones
 - **Auto-Connect** — bot joins your voice channel automatically when playing a sound
 
-### Voice Recording
-- **Start/Stop Recording** — toggle recording from the Voice tab when connected to a channel
-- **Per-Speaker Files** — each speaker is saved as a separate WAV file
-- **Recent Recordings** — browse recorded clips directly in the dashboard
-
 ### Slash Commands
 
 | Command | Description |
@@ -109,7 +104,6 @@ cogs/
 static/
   index.html        Tailwind CSS dashboard UI
 sounds/             Uploaded audio files (Docker volume)
-recordings/         Voice recording WAV files (Docker volume)
 data/               SQLite database file (Docker volume)
 ```
 
