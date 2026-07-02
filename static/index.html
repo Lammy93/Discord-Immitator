@@ -116,17 +116,34 @@
 
         <!-- Voice Tab -->
         <div id="view-voice" class="tab-view hidden">
-            <div class="glass p-6 rounded-2xl">
+            <div class="glass p-6 rounded-2xl mb-6">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-xl font-semibold flex items-center gap-2">
                         <i class="fa-solid fa-volume-high"></i> Available Voice Channels
                     </h2>
-                    <button onclick="disconnectVoice()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
-                        <i class="fa-solid fa-phone-slash"></i> Disconnect
-                    </button>
+                    <div class="flex items-center gap-3">
+                        <div id="recording-status" class="hidden text-sm text-red-400 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                            <span>Recording</span>
+                        </div>
+                        <button onclick="toggleRecording()" id="btn-recording" class="hidden bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-circle"></i> Start Recording
+                        </button>
+                        <button onclick="disconnectVoice()" class="bg-slate-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-phone-slash"></i> Disconnect
+                        </button>
+                    </div>
                 </div>
                 <div id="channels-list" class="space-y-3">
                     <!-- Channels loaded here -->
+                </div>
+            </div>
+            <div id="recordings-list" class="glass p-6 rounded-2xl">
+                <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-tape"></i> Recent Recordings
+                </h2>
+                <div id="recordings-files" class="text-sm text-slate-400">
+                    <p>No recordings yet.</p>
                 </div>
             </div>
         </div>
@@ -211,6 +228,17 @@
                             indicator.className = 'w-2 h-2 rounded-full bg-slate-500';
                             text.innerText = 'Disconnected';
                         }
+
+                        if (guild.is_connected && guild.is_recording) {
+                            document.getElementById('recording-status').classList.remove('hidden');
+                            document.getElementById('btn-recording').innerHTML = '<i class="fa-solid fa-stop"></i> Stop Recording';
+                            document.getElementById('btn-recording').className = 'bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2';
+                        } else if (guild.is_connected && !guild.is_recording) {
+                            document.getElementById('recording-status').classList.add('hidden');
+                            document.getElementById('btn-recording').innerHTML = '<i class="fa-solid fa-circle"></i> Start Recording';
+                            document.getElementById('btn-recording').className = 'bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2';
+                        }
+                        document.getElementById('btn-recording').classList.toggle('hidden', !guild.is_connected);
                         
                         if (guild.imitating) {
                             const avatar = guild.imitating_avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png';
@@ -441,6 +469,43 @@
             }
         }
 
+        async function toggleRecording() {
+            if (!selectedGuildId) return alert('Please select a server first!');
+            const endpoint = document.getElementById('btn-recording').innerText.includes('Start')
+                ? '/voice/record/start'
+                : '/voice/record/stop';
+            try {
+                await api(endpoint, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({guild_id: selectedGuildId})
+                });
+                updateStatus();
+                if (endpoint.includes('stop')) setTimeout(loadRecordings, 500);
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        async function loadRecordings() {
+            try {
+                const files = await api('/voice/recordings');
+                const container = document.getElementById('recordings-files');
+                if (files.length === 0) {
+                    container.innerHTML = '<p class="text-sm text-slate-400">No recordings yet.</p>';
+                    return;
+                }
+                container.innerHTML = files.map(f =>
+                    `<div class="flex items-center justify-between py-1 border-b border-slate-700/50 last:border-0">
+                        <span class="text-slate-300">${f.name}</span>
+                        <span class="text-xs text-slate-500">${(f.size / 1024).toFixed(0)} KB</span>
+                    </div>`
+                ).join('');
+            } catch (e) {
+                console.error("Failed to load recordings:", e);
+            }
+        }
+
         async function disconnectVoice() {
             if (!selectedGuildId) return alert('Please select a server first!');
             try {
@@ -519,7 +584,7 @@
             
             if (tab === 'members') loadMembers();
             if (tab === 'sounds') loadSounds();
-            if (tab === 'voice') loadChannels();
+            if (tab === 'voice') { loadChannels(); loadRecordings(); }
         }
 
         setInterval(updateStatus, 5000);

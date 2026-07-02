@@ -36,7 +36,7 @@ class ImitateSendMessageRequest(BaseModel):
 
 class VoiceJoinRequest(BaseModel):
     guild_id: str
-    channel_id: str
+    channel_id: str = None
 
 class SoundPlayRequest(BaseModel):
     guild_id: str
@@ -76,6 +76,7 @@ async def get_status():
             "name": g.name,
             "voice_channel": voice_client.channel.name if voice_client and voice_client.channel else None,
             "is_connected": voice_client is not None,
+            "is_recording": voice_client.recording if voice_client else False,
             "imitating": target_name,
             "imitating_avatar_url": target_avatar_url,
             "imitating_member_id": target_member_id
@@ -327,6 +328,63 @@ async def join_voice(req: VoiceJoinRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/voice/record/start")
+async def start_recording(req: VoiceJoinRequest):
+    bot = app.state.bot
+    guild = bot.get_guild(int(req.guild_id))
+    if not guild:
+        raise HTTPException(status_code=404, detail="Guild not found")
+
+    voice_client = discord.utils.get(bot.voice_clients, guild=guild)
+    if not voice_client:
+        raise HTTPException(status_code=400, detail="Bot is not in a voice channel")
+    if voice_client.recording:
+        raise HTTPException(status_code=400, detail="Already recording")
+
+    sink = discord.sinks.WaveSink()
+    voice_client.start_recording(sink, on_recording_finished, guild.id)
+    return {"status": "success", "message": "Recording started"}
+
+@app.post("/api/voice/record/stop")
+async def stop_recording(req: VoiceJoinRequest):
+    bot = app.state.bot
+    guild = bot.get_guild(int(req.guild_id))
+    if not guild:
+        raise HTTPException(status_code=404, detail="Guild not found")
+
+    voice_client = discord.utils.get(bot.voice_clients, guild=guild)
+    if not voice_client or not voice_client.recording:
+        raise HTTPException(status_code=400, detail="Not recording")
+
+    voice_client.stop_recording()
+    return {"status": "success", "message": "Recording stopped"}
+
+async def on_recording_finished(sink, guild_id):
+    import datetime
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.makedirs("recordings", exist_ok=True)
+    for uid, ad in sink.audio_data.items():
+        ad.file.seek(0)
+        path = os.path.join("recordings", f"recording_{uid}_{ts}.wav")
+        with open(path, "wb") as f:
+            f.write(ad.file.read())
+    logger.info(f"Recording saved for guild {guild_id}: {len(sink.audio_data)} file(s)")
+
+@app.get("/api/voice/recordings")
+async def list_recordings():
+    import glob
+    os.makedirs("recordings", exist_ok=True)
+    files = []
+    for f in sorted(os.listdir("recordings"), reverse=True):
+        path = os.path.join("recordings", f)
+        if os.path.isfile(path):
+            files.append({
+                "name": f,
+                "size": os.path.getsize(path),
+                "modified": os.path.getmtime(path)
+            })
+    return files[0:50]
+
 @app.post("/api/voice/disconnect")
 async def disconnect_voice(req: VoiceJoinRequest):
     bot = app.state.bot
@@ -339,6 +397,10 @@ async def disconnect_voice(req: VoiceJoinRequest):
         raise HTTPException(status_code=400, detail="Bot is not connected to any voice channel")
     
     try:
+        if voice_client.is_playing():
+            voice_client.stop()
+        if voice_client.recording:
+            voice_client.stop_recording()
         await voice_client.disconnect()
         return {"status": "success", "message": "Disconnected from voice channel"}
     except Exception as e:

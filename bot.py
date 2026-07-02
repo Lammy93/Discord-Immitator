@@ -24,6 +24,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Ensure required directories exist
 os.makedirs("sounds", exist_ok=True)
+os.makedirs("recordings", exist_ok=True)
 os.makedirs("cogs", exist_ok=True)
 
 # Initialize database
