@@ -25,7 +25,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application source code
 COPY bot.py .
 COPY database.py .
+COPY web_server.py .
 COPY cogs/ ./cogs/
+COPY static/ ./static/
 
 # Create folders for persistent storage (SQLite DB and custom sound files)
 RUN mkdir -p /app/sounds
